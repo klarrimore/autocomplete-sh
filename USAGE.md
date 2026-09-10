@@ -155,6 +155,8 @@ autocomplete context --mode ai-rewrite "show failed units"
 
 `ai-complete` preserves the typed prefix; `ai-rewrite` proposes whole-line alternatives. Both print numbered previews and never execute a suggestion or modify the live line. Their default Readline bindings are <kbd>Ctrl-X Ctrl-A</kbd> and <kbd>Ctrl-X Ctrl-B</kbd>. Set `ACSH_AI_COMPLETE_KEY` or `ACSH_AI_REWRITE_KEY` before sourcing `autocomplete.sh` to choose another Readline sequence, or set either variable to an empty string to disable that binding. Zsh supports the cross-shell `autocomplete command "…"` interface instead.
 
+Two config keys bound how long these actions wait for the model (separate from `request_timeout_seconds`, the provider HTTP timeout). `ai_deadline` (default `1.5`) bounds the interactive keybindings so the live prompt stays responsive; `ai_cli_deadline` (default `8`) bounds the explicit `autocomplete ai-complete`/`ai-rewrite` commands, which have no prompt to block and so tolerate a slower round-trip. Both are seconds and can be overridden per-invocation with the `ACSH_AI_DEADLINE` and `ACSH_AI_CLI_DEADLINE` environment variables.
+
 10. **Interact with the Model Selection Menu**
 
     ```bash

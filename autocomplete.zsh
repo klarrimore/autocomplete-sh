@@ -44,7 +44,7 @@ echo_green() {
 #                     Global Variables & Model Definitions                    #
 ###############################################################################
 
-export ACSH_VERSION=0.6.1
+export ACSH_VERSION=0.7.0
 export ACSH_CACHE_SCHEMA_VERSION=1
 
 typeset -A _autocomplete_modellist

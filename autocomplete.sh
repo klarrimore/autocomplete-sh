@@ -26,7 +26,7 @@ echo_green() {
 #                      Global Variables & Model Definitions                   #
 ###############################################################################
 
-export ACSH_VERSION=0.6.1
+export ACSH_VERSION=0.7.0
 
 # Cache schema version for the answer cache (acsh-v1-<sha256>.txt).
 export ACSH_CACHE_SCHEMA_VERSION=1
@@ -574,7 +574,7 @@ _validate_config_value() {
                 return 1
             fi
             ;;
-        request_timeout_seconds|help_timeout_seconds)
+        request_timeout_seconds|help_timeout_seconds|ai_deadline|ai_cli_deadline)
             if [[ ! "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] \
                 || ! awk -v number="$value" 'BEGIN { exit !(number > 0) }' </dev/null 2>/dev/null; then
                 echo_error "$key must be a positive decimal."
@@ -728,16 +728,27 @@ _request_completion() {
 #                      AI Request Orchestration (explicit actions)            #
 ###############################################################################
 
-# Resolve the interactive AI deadline in milliseconds from $ACSH_AI_DEADLINE
-# (seconds, >0). Invalid/absent -> 1500. The provider's general HTTP timeout
-# stays in $ACSH_REQUEST_TIMEOUT_SECONDS; this knob is the interactive wait
-# ceiling only.
+# Resolve the AI wait ceiling in milliseconds for a given call context.
+#   $1 = context: "interactive" (bind -x keybinding, live prompt to protect)
+#        or "cli" (explicit `autocomplete ai-*` subprocess, no prompt). Default
+#        "cli".
+# The interactive path reads $ACSH_AI_DEADLINE (default 1.5s) to keep the live
+# prompt responsive; the explicit CLI path reads $ACSH_AI_CLI_DEADLINE (default
+# 8s), which has no prompt to block and is what testing exercises. Invalid or
+# absent values fall back to the context default. The provider's general HTTP
+# timeout stays in $ACSH_REQUEST_TIMEOUT_SECONDS; these knobs are wait ceilings
+# only.
 _acsh_deadline_ms() {
-    local d="${ACSH_AI_DEADLINE:-1.5}"
+    local ctx="${1:-cli}" d fallback
+    if [[ "$ctx" == "interactive" ]]; then
+        d="${ACSH_AI_DEADLINE:-1.5}"; fallback=1500
+    else
+        d="${ACSH_AI_CLI_DEADLINE:-8}"; fallback=8000
+    fi
     if [[ "$d" =~ ^[0-9]+([.][0-9]+)?$ ]] && awk -v d="$d" 'BEGIN{exit !(d>0)}' /dev/null; then
         awk -v d="$d" 'BEGIN{printf "%d", d*1000}'
     else
-        echo 1500
+        echo "$fallback"
     fi
 }
 
@@ -831,12 +842,13 @@ _acsh_is_destructive() {
 }
 
 # Run one explicit AI request with a strict deadline, no sync retry, no execute.
-#   $1 = mode (ai-completion|ai-rewrite)
-#   $2 = line   $3 = cursor   $4 = cwd
+#   $1 = ctx (interactive|cli) -> selects the wait ceiling
+#   $2 = mode (ai-completion|ai-rewrite)
+#   $3 = line   $4 = cursor   $5 = cwd
 # stdout: raw provider candidate lines on success; rc=0 if any candidate text
 #         was produced, rc=1 on timeout/failure/stale/neg-cached/empty.
 _run_ai_request() {
-    local mode="$1" line="$2" cursor="$3" cwd="$4"
+    local ctx="$1" mode="$2" line="$3" cursor="$4" cwd="$5"
     local sig_before sig_now deadline tmp pid deadline_ms rc result candidates
 
     case "$mode" in
@@ -852,7 +864,7 @@ _run_ai_request() {
         return 1
     fi
 
-    deadline_ms=$(_acsh_deadline_ms)
+    deadline_ms=$(_acsh_deadline_ms "$ctx")
     sig_before="$line|$cursor|$PWD|$mode|${ACSH_PROVIDER:-}|${ACSH_MODEL:-}"
     deadline=$(( $(date +%s%N) / 1000000 + deadline_ms ))
     tmp=$(mktemp)
@@ -1412,6 +1424,13 @@ request_timeout_seconds: 5
 request_headers_json: {}
 extra_body_json: {}
 
+# AI wait ceilings (seconds). ai_deadline bounds the interactive keybinding so
+# the live prompt stays responsive; ai_cli_deadline bounds the explicit
+# ai-complete/ai-rewrite commands, which have no prompt to block. Neither
+# changes request_timeout_seconds (the provider HTTP timeout).
+ai_deadline: 1.5
+ai_cli_deadline: 8
+
 # Bash native completion display: list prints ambiguous candidates;
 # menu cycles candidates on Tab instead of dumping the list.
 tab_display_mode: list
@@ -1844,7 +1863,7 @@ _ai_complete_key() {
     # preserving). Prints an inline preview; never modifies READLINE_LINE.
     local line="$READLINE_LINE"
     if [[ -z "$line" ]]; then return 0; fi
-    _run_ai_command ai-completion ai-complete "$line"
+    _run_ai_command interactive ai-completion ai-complete "$line"
 }
 
 _ai_rewrite_key() {
@@ -1852,7 +1871,7 @@ _ai_rewrite_key() {
     # Prints an inline preview; never modifies READLINE_LINE.
     local line="$READLINE_LINE"
     if [[ -z "$line" ]]; then return 0; fi
-    _run_ai_command ai-rewrite ai-rewrite "$line"
+    _run_ai_command interactive ai-rewrite ai-rewrite "$line"
 }
 
 command_command() {
@@ -1898,12 +1917,13 @@ command_command() {
 # Shared driver for the explicit AI actions. Handles flag parsing (--dry-run
 # precedes the line; no `--` separator; remaining args joined with spaces),
 # calls the request orchestrator, validates, and prints a numbered preview.
-#   $1 = mode (ai-completion|ai-rewrite)
-#   $2 = user-facing action name (ai-complete|ai-rewrite)
+#   $1 = ctx (interactive|cli) -> selects the wait ceiling
+#   $2 = mode (ai-completion|ai-rewrite)
+#   $3 = user-facing action name (ai-complete|ai-rewrite)
 #   rest = flags + line
 _run_ai_command() {
-    local mode="$1" action="$2" dry_run=0 arg line cand flag
-    shift 2
+    local ctx="$1" mode="$2" action="$3" dry_run=0 arg line cand flag
+    shift 3
     for arg in "$@"; do
         if [[ "$arg" == "--dry-run" ]]; then
             dry_run=1
@@ -1924,10 +1944,15 @@ _run_ai_command() {
         _print_context "$mode" "$line"
         return 0
     fi
-    local result candidates dest_i
-    result=$(_run_ai_request "$mode" "$line" "${#line}" "$PWD" 2>/dev/null)
+    # Load config in THIS scope so the deadline reported on failure matches the
+    # ceiling the request actually used; _run_ai_request runs in a command-sub
+    # subshell, so its own config load never reaches us.
+    acsh_load_config || return 1
+    local result candidates dest_i deadline_s
+    result=$(_run_ai_request "$ctx" "$mode" "$line" "${#line}" "$PWD" 2>/dev/null)
     if [[ -z "$result" ]]; then
-        echo "No AI result within ${ACSH_AI_DEADLINE:-1.5}s."
+        deadline_s=$(awk -v ms="$(_acsh_deadline_ms "$ctx")" 'BEGIN{printf "%g", ms/1000}')
+        echo "No AI result within ${deadline_s}s."
         return 1
     fi
     # Provider returns one candidate per line; preserve that boundary when
@@ -1958,12 +1983,12 @@ _run_ai_command() {
 
 ai_complete_command() {
     shift   # drop the subcommand word (dispatched by the CLI case)
-    _run_ai_command ai-completion ai-complete "$@"
+    _run_ai_command cli ai-completion ai-complete "$@"
 }
 
 ai_rewrite_command() {
     shift   # drop the subcommand word (dispatched by the CLI case)
-    _run_ai_command ai-rewrite ai-rewrite "$@"
+    _run_ai_command cli ai-rewrite ai-rewrite "$@"
 }
 
 context_command() {

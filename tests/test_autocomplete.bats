@@ -90,6 +90,8 @@ write_openai_commands_fixture() {
     grep -q '^max_help_lines: 40' "$config_file"
     grep -q '^help_timeout_seconds: 0.25' "$config_file"
     grep -q '^request_timeout_seconds: 5' "$config_file"
+    grep -q '^ai_deadline: 1.5' "$config_file"
+    grep -q '^ai_cli_deadline: 8' "$config_file"
     grep -q '^request_headers_json: {}' "$config_file"
     grep -q '^extra_body_json: {}' "$config_file"
     grep -q '^openai_compatible_api_key:' "$config_file"
@@ -476,6 +478,37 @@ write_openai_commands_fixture() {
     [[ "$output" == *"1. touch $HOME/ai-must-not-run"* ]]
     [ ! -e "$HOME/ai-must-not-run" ]
     [ "$(request_count)" -eq 2 ]
+}
+
+@test "explicit ai-rewrite uses the CLI deadline, not the tight interactive one" {
+    local rewrite_commands rewrite_fixture
+    use_offline_provider
+    # A provider slower than the interactive ceiling must still succeed on the
+    # CLI path, which has no live prompt to protect.
+    export ACSH_TEST_DELAY=0.4
+    config_set ai_deadline 0.1        # interactive ceiling: must NOT gate the CLI
+    config_set ai_cli_deadline 5      # generous CLI ceiling
+
+    rewrite_commands=$(jq -nc '["systemctl list-units --failed"]')
+    rewrite_fixture="$TEST_HOME/openai-rewrite-cli.json"
+    write_openai_commands_fixture "$rewrite_fixture" "$rewrite_commands"
+    export ACSH_TEST_RESPONSE_FILE="$rewrite_fixture"
+
+    run autocomplete ai-rewrite "show failed units"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"1. systemctl list-units --failed"* ]]
+}
+
+@test "explicit ai-rewrite reports the CLI deadline when it times out" {
+    use_offline_provider
+    export ACSH_TEST_RESPONSE_FILE="$TEST_REPO_ROOT/tests/fixtures/openai-success.json"
+    export ACSH_TEST_DELAY=1
+    config_set request_timeout_seconds 5   # HTTP timeout stays generous
+    config_set ai_cli_deadline 0.3         # the wait ceiling that should fire
+
+    run autocomplete ai-rewrite "show failed units"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"No AI result within 0.3s."* ]]
 }
 
 @test "terminal context contains only physical cwd, OS, shell, and terminal fields in both shells" {

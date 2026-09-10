@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.7.0] - 2026-09-10
+
+### Added
+- Added a separate `ai_cli_deadline` (default 8s) for the explicit `ai-complete`/`ai-rewrite` commands, decoupled from the interactive `ai_deadline` (default 1.5s) that guards the live prompt
+
+### Changed
+- The "No AI result within Ns." message now reports the deadline that actually applied to the invocation instead of a hardcoded 1.5s
+
+### Fixed
+- Fixed explicit `ai-complete`/`ai-rewrite` CLI runs being cut off by the tight interactive 1.5s deadline
+
 ## [v0.6.1] - 2026-09-10
 
 ### Added
