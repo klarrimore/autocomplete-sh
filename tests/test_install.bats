@@ -175,6 +175,12 @@ assert_quoted_runtime_path_is_sourceable() {
     assert_quoted_runtime_path_is_sourceable zsh
 }
 
+@test "installer help advertises main as the default version" {
+    run bash -c 'cd "$1" && exec sh docs/install.sh --help' _ "$TEST_REPO_ROOT"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'Default: main.'* ]]
+}
+
 @test "a missing dependency aborts preflight with the install untouched" {
     run_installer bash dev
     [ "$status" -eq 0 ]
@@ -263,4 +269,27 @@ assert_quoted_runtime_path_is_sourceable() {
         return 1
     fi
     grep -q -F 'export ACSH_STYLE="fancy-autocomplete-mode"' "$HOME/.zshrc"
+}
+
+@test "Zsh install and remove preserve a symlinked .zshrc" {
+    require_zsh
+    local target="$TEST_HOME/dotfiles/.zshrc"
+    mkdir -p "$(dirname "$target")"
+    printf 'export KEEP_ZSH_SYMLINK=1\n' > "$target"
+    rm -f "$HOME/.zshrc"
+    ln -s "$target" "$HOME/.zshrc"
+
+    run_installer zsh dev
+    [ "$status" -eq 0 ]
+    [ -L "$HOME/.zshrc" ]
+    [ "$(grep -c '# >>> autocomplete.sh >>>' "$target")" -eq 1 ]
+
+    echo 'export KEEP_AFTER_REMOVE=1' >> "$target"
+    run env HOME="$TEST_HOME" PATH="$HOME/.local/bin:$PATH" \
+        "$HOME/.local/bin/autocomplete" remove -y
+    [ "$status" -eq 0 ]
+    [ -L "$HOME/.zshrc" ]
+    [ "$(grep -c '# >>> autocomplete.sh >>>' "$target")" -eq 0 ]
+    grep -q '^export KEEP_ZSH_SYMLINK=1$' "$target"
+    grep -q '^export KEEP_AFTER_REMOVE=1$' "$target"
 }

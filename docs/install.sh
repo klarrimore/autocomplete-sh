@@ -2,7 +2,7 @@
 
 # Autocomplete.sh installer for the Bash and Zsh runtimes.
 
-ACSH_VERSION="v0.6.0"
+ACSH_VERSION="main"
 
 usage() {
     cat <<EOF

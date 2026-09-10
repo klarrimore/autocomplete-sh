@@ -350,7 +350,9 @@ _validate_headers_json() {
     local json="$1"
     if ! print -rn -- "$json" | jq -e '
         def token: (type == "string") and test("^[A-Za-z0-9!#$%&\\x27*+.^_`|~-]+$");
-        def value_ok: (type == "string") and ((test("[\r\n]")) | not);
+        def value_ok:
+            (type == "string") and
+            (explode | all(. == 9 or (. >= 32 and . != 127)));
         def unreserved:
             ((. | ascii_downcase) != "authorization") and
             ((. | ascii_downcase) != "content-type");
@@ -363,7 +365,7 @@ _validate_headers_json() {
             )
         ] | length == 0)
     ' >/dev/null 2>&1; then
-        echo_error "ACSH_REQUEST_HEADERS_JSON must be a JSON object with HTTP-token field names and string values without CR/LF; Authorization and Content-Type are reserved."
+        echo_error "ACSH_REQUEST_HEADERS_JSON must be a JSON object with HTTP-token field names and string values without control characters other than HTAB; Authorization and Content-Type are reserved."
         return 1
     fi
     return 0
@@ -699,7 +701,7 @@ _request_completion() {
 # normalized context_*/context-bound config values. Returns the sha256 digest.
 _completion_cache_key() {
     local mode="$1" line="$2" cursor="$3"
-    local cwd provider endpoint model active_key_digest headers extra_body temperature
+    local cwd provider endpoint model active_key_digest headers extra_body temperature prompt_digest
     cwd=$(pwd -P 2>/dev/null || print -r -- "$PWD")
     provider="$ACSH_PROVIDER"
     endpoint=${ACSH_ENDPOINT:-"https://api.openai.com/v1/chat/completions"}
@@ -712,6 +714,7 @@ _completion_cache_key() {
     headers=$(_normalize_json "$headers") || return 1
     extra_body=$(_normalize_json "$extra_body") || return 1
     temperature=$(jq -nr --arg value "$ACSH_TEMPERATURE" '$value | tonumber | . + 0' 2>/dev/null) || return 1
+    prompt_digest=$(_build_prompt "$mode" "$line" | sha256sum | cut -d ' ' -f 1) || return 1
 
     {
         printf 'schema_version=%s\0' "$ACSH_CACHE_SCHEMA_VERSION"
@@ -727,6 +730,7 @@ _completion_cache_key() {
         printf 'extra_body_json=%s\0' "$extra_body"
         printf 'temperature=%s\0' "$temperature"
         printf 'active_key_sha256=%s\0' "$active_key_digest"
+        printf 'prompt_sha256=%s\0' "$prompt_digest"
         printf 'context_terminal=%s\0' "${ACSH_CONTEXT_TERMINAL:-false}"
         printf 'context_environment=%s\0' "${ACSH_CONTEXT_ENVIRONMENT:-false}"
         printf 'context_history=%s\0' "${ACSH_CONTEXT_HISTORY:-false}"
@@ -871,9 +875,7 @@ _cached_completion() {
     fi
     completions=$(_parse_and_validate_completions "$provider" "$raw_body") || return 1
     log_request "$line" "$raw_body"
-    if [[ -d "$cache_dir" && "$cache_size" -gt 0 ]]; then
-        mkdir -p "$cache_dir" 2>/dev/null
-        _cache_write "$cache_file" "$completions"
+    if [[ "$cache_size" -gt 0 ]] && _cache_write "$cache_file" "$completions"; then
         # Existing oldest-first eviction against the configured cache size.
         while [[ $(list_cache | wc -l) -gt "$cache_size" ]]; do
             oldest=$(list_cache | head -n 1 | cut -d ' ' -f 2-)
@@ -1283,6 +1285,9 @@ install_command() {
         echo_error "autocomplete.zsh script path not found ($ACSH_SCRIPT_PATH). Follow install instructions at https://github.com/closedloop-technologies/autocomplete-sh"
         return
     fi
+    if command -v readlink >/dev/null 2>&1; then
+        rc_file=$(readlink -f "$rc_file" 2>/dev/null || print -r -- "$rc_file")
+    fi
     if [[ ! -d "$HOME/.autocomplete" ]]; then
         echo "Creating ~/.autocomplete directory"
         mkdir -p "$HOME/.autocomplete"
@@ -1323,6 +1328,9 @@ remove_command() {
     local tmp_file orig_mode confirm remove_script=0 arg
     echo_green "Removing Autocomplete.zsh installation..."
     disable_command
+    if command -v readlink >/dev/null 2>&1; then
+        rc_file=$(readlink -f "$rc_file" 2>/dev/null || print -r -- "$rc_file")
+    fi
     if [ -f "$rc_file" ]; then
         tmp_file=$(mktemp "$(dirname "$rc_file")/.acsh-rc.XXXXXX") || return 1
         orig_mode=$(stat -c %a "$rc_file" 2>/dev/null || echo 644)
