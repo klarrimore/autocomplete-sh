@@ -26,7 +26,7 @@ echo_green() {
 #                      Global Variables & Model Definitions                   #
 ###############################################################################
 
-export ACSH_VERSION=0.6.0
+export ACSH_VERSION=0.6.1
 
 # Cache schema version for the answer cache (acsh-v1-<sha256>.txt).
 export ACSH_CACHE_SCHEMA_VERSION=1
@@ -64,6 +64,7 @@ export ACSH_AI_REWRITE_KEY=${ACSH_AI_REWRITE_KEY-'\C-x\C-b'}
 : "${_ACSH_SAVED_DEFAULT_COMPLETION=}"
 : "${_ACSH_SAVED_EMPTY_COMPLETION=}"
 : "${_ACSH_COMPLETION_STATE_CAPTURED=0}"
+: "${_ACSH_SHELL_INTEGRATION_ACTIVE=0}"
 
 unset _autocomplete_modellist
 declare -A _autocomplete_modellist
@@ -1205,16 +1206,25 @@ is_subshell() {
     fi
 }
 
+is_sourced() {
+    [[ "${BASH_SOURCE[0]:-}" != "$0" ]]
+}
+
 show_config() {
     local config_file="$HOME/.autocomplete/config" term_width small_table
     echo_green "Autocomplete.sh - Configuration and Settings - Version $ACSH_VERSION"
-    if is_subshell; then
-        echo "  STATUS: Unknown. Run 'autocomplete config' in an interactive shell to check status."
-        return
-    elif check_if_enabled; then
+    if is_sourced; then
+        if check_if_enabled; then
+            echo -e "  STATUS: \033[32;5mEnabled\033[0m"
+        else
+            echo -e "  STATUS: \033[31;5mDisabled\033[0m - Run 'source autocomplete enable' to activate this shell."
+        fi
+    elif [[ "${_ACSH_SHELL_INTEGRATION_ACTIVE:-0}" == "1" ]]; then
         echo -e "  STATUS: \033[32;5mEnabled\033[0m"
+    elif is_subshell; then
+        echo "  STATUS: Unknown. Run 'autocomplete config' in an interactive shell to check status."
     else
-        echo -e "  STATUS: \033[31;5mDisabled\033[0m - Run 'source autocomplete enable' to activate this shell."
+        echo "  STATUS: Unknown. Run 'source autocomplete enable' in this shell to activate."
     fi
     if [ ! -f "$config_file" ]; then
         echo_error "Configuration file not found: $config_file. Run autocomplete install."
@@ -1229,6 +1239,9 @@ show_config() {
         term_width=70; small_table=1
     fi
     for config_var in $(compgen -v | grep ACSH_); do
+        if [[ $config_var == _ACSH_* ]]; then
+            continue
+        fi
         if [[ $config_var == "ACSH_INPUT" || $config_var == "ACSH_PROMPT" || $config_var == "ACSH_RESPONSE" ]]; then
             continue
         fi
@@ -1246,6 +1259,9 @@ show_config() {
     done
     echo -e "  ===================================================================="
     for config_var in $(compgen -v | grep ACSH_); do
+        if [[ $config_var == _ACSH_* ]]; then
+            continue
+        fi
         if [[ $config_var == "ACSH_INPUT" || $config_var == "ACSH_PROMPT" || $config_var == "ACSH_RESPONSE" ]]; then
             continue
         fi
@@ -1782,6 +1798,7 @@ enable_command() {
             bind '"\e[Z": menu-complete-backward' 2>/dev/null || true
             ;;
     esac
+    export _ACSH_SHELL_INTEGRATION_ACTIVE=1
 }
 
 disable_command() {
@@ -1805,6 +1822,7 @@ disable_command() {
     _ACSH_SAVED_DEFAULT_COMPLETION=""
     _ACSH_SAVED_EMPTY_COMPLETION=""
     _ACSH_COMPLETION_STATE_CAPTURED=0
+    export _ACSH_SHELL_INTEGRATION_ACTIVE=0
 
     # Remove the `autocomplete` CLI completion ONLY when it is still ours.
     local cli_fn

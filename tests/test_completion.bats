@@ -95,6 +95,22 @@ run_clean_zsh() {
     [[ "$output" == *"menu-complete-backward can be invoked via \"\\e[Z\""* ]]
 }
 
+@test "standalone Bash config uses the sourced shell integration marker" {
+    run_clean_bash '
+        source "$HOME/.local/bin/autocomplete" >/dev/null
+        build_config
+        source "$HOME/.local/bin/autocomplete" enable >/dev/null 2>&1 || exit 9
+        autocomplete config
+        source "$HOME/.local/bin/autocomplete" disable >/dev/null 2>&1 || exit 10
+        autocomplete config
+    '
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"STATUS: "*"Enabled"* ]]
+    [[ "$output" == *"STATUS: Unknown. Run "*"source autocomplete enable"*" in this shell to activate."* ]]
+    [[ "$output" != *"_ACSH_COMPLETION_STATE_CAPTURED"* ]]
+    [[ "$output" != *"_ACSH_SHELL_INTEGRATION_ACTIVE"* ]]
+}
+
 @test "check_if_enabled identifies only the native -D handler and follows disable" {
     run_clean_bash '
         _pre_default() { COMPREPLY=(); }

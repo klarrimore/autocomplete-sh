@@ -1,131 +1,185 @@
 Autocomplete.sh
 ========================================================
 
-## `--help` less, accomplish more: Command your terminal
+AI command suggestions for your terminal, without taking over Tab.
 
-> Command your terminal with intelligent suggestions
-
-Autocomplete.sh brings AI-powered command-line suggestions to your terminal. Press `<TAB>` (or `<TAB><TAB>`) and you get your shell's own native completions — fast, provider-free, and never an LLM call. When you want an AI to compose a command, ask for it explicitly:
-
-```bash
-autocomplete command "reformat this video to fit youtube"
-```
-
-![Autocomplete.sh Demo](https://github.com/user-attachments/assets/6f2a8f81-49b7-46e9-8005-c8a9dd3fc033)
-
-Use natural language without copying between CoPilot or ChatGPT
-
-## Quick Start
-
-Download the installer, then run it for your shell:
-
-`$HOME/.local/bin` must already be in `PATH`. If it is not, run:
-
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-```bash
-wget -O install.sh https://autocomplete.sh/install.sh
-bash install.sh --shell bash --version main   # or: --shell zsh
-```
-
-The installer places the `autocomplete` command at `$HOME/.local/bin/autocomplete` and sets up your shell. Start a new shell (or `source ~/.bashrc` / `source ~/.zshrc`): Tab completion is live immediately, and AI suggestions are one explicit action away —
+Autocomplete.sh keeps normal shell completion fast and local. Press <kbd>Tab</kbd>
+and Bash or Zsh completes commands, flags, files, and paths the way it already
+does. When you want help turning an idea into a command, ask explicitly:
 
 ```bash
 autocomplete command "list the files here, largest first"
 ```
 
-Choose a provider — OpenAI, Groq, Anthropic, Ollama, or any OpenAI-compatible endpoint — with:
+![Autocomplete.sh Demo](https://github.com/user-attachments/assets/6f2a8f81-49b7-46e9-8005-c8a9dd3fc033)
+
+## Quick Start
+
+Make sure `$HOME/.local/bin` is on your `PATH`:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Download and run the installer:
+
+```bash
+wget -O install.sh https://autocomplete.sh/install.sh
+bash install.sh --shell bash --version main
+```
+
+For Zsh:
+
+```bash
+bash install.sh --shell zsh --version main
+```
+
+Reload your shell:
+
+```bash
+source ~/.bashrc
+# or
+source ~/.zshrc
+```
+
+Choose a model and provider:
 
 ```bash
 autocomplete model
 ```
 
-## Features
-
-- **Native Tab**: `<TAB>` / `<TAB><TAB>` use your shell's built-in completion. Provider-free, offline, instant — no LLM involved.
-- **Context-Aware**: Opt-in terminal state, environment variable names, recent commands, recent files, and `--help` output — every section off by default.
-- **Flexible**: Supports various LLM models, from fast and cheap to powerful, plus any OpenAI-compatible endpoint.
-- **Secure**: Enables local LLMs and sanitizes prompts for sensitive information.
-- **Efficient**: Caches recent requests for speed and convenience.
-- **Cost-Effective**: Monitors API call sizes and costs.
-
-## Supported Models
-
-We support OpenAI, Groq, Anthropic, and Ollama — plus any server that speaks the OpenAI Chat Completions API. Configure your model with:
+Then ask for your first command:
 
 ```bash
-autocomplete model
+autocomplete command "find large log files modified today"
 ```
 
-![Model Selection](https://github.com/user-attachments/assets/6206963f-81c2-4d68-b054-6ec88969ba0c)
+Autocomplete.sh prints numbered suggestions. It does not execute them for you.
 
-## How It Works
+## What Tab Does
 
-`<TAB>` stays 100% shell-native; AI suggestions always require an explicit action. Bash and Zsh support `autocomplete command "…"`, while Bash also provides non-executing `ai-complete` and `ai-rewrite` actions for the live command line. Each request builds a prompt containing your shell, its mode, and your input — plus any context sections you enabled:
+Tab stays shell-native.
 
-- Your machine's environment — sorted variable *names* only, never values
-- Recently executed commands — with secrets redacted
-- Current directory contents — file basenames only
-- Command-specific help — `--help` output of the first command in your request
+- <kbd>Tab</kbd> uses Bash or Zsh completion, not an LLM.
+- Tab completion works offline and does not create provider requests.
+- Existing completion definitions from tools such as Git, Docker, Mise, and
+  package managers remain responsible for their own flags and arguments.
+- On an empty Bash prompt, Tab does not expand to every command on the system.
 
-Preview the exact prompt, network-free:
+Bash users can choose how ambiguous native completions display:
 
 ```bash
-autocomplete command --dry-run "your command here"
+autocomplete config set tab_display_mode list   # default Bash behavior
+autocomplete config set tab_display_mode menu   # cycle choices inline on Tab
+source autocomplete enable
 ```
 
-### Bash-only live-line AI actions
+`menu` can feel calmer when a command has many possible flags. It still uses
+native Bash completion. It does not call an AI provider.
 
-Bash users can request a numbered preview without executing a suggestion or changing the live command line:
+## Ask AI Explicitly
+
+Use `autocomplete command` when you know what you want to do but not the exact
+syntax:
 
 ```bash
-autocomplete ai-complete "git ch"          # prefix-preserving completion
-autocomplete ai-rewrite "show failed units" # whole-line rewrite
+autocomplete command "compress this directory into a dated tar.gz"
+autocomplete command "show listening ports with process names"
+autocomplete command "create a git branch for fixing login redirects"
+```
+
+Preview the exact prompt without making a provider request:
+
+```bash
+autocomplete command --dry-run "restart nginx safely"
+```
+
+## Bash Live-Line Actions
+
+Bash also includes AI actions for the current command line. They print numbered
+suggestions and never execute output.
+
+```bash
+autocomplete ai-complete "git ch"
+autocomplete ai-rewrite "show failed units"
 autocomplete context --mode ai-completion "git ch"
 ```
 
-The default Readline bindings are <kbd>Ctrl-X Ctrl-A</kbd> for completion and <kbd>Ctrl-X Ctrl-B</kbd> for rewrite. Override `ACSH_AI_COMPLETE_KEY` or `ACSH_AI_REWRITE_KEY` before sourcing `autocomplete.sh`; set either variable to an empty string to disable that binding. These commands and bindings are Bash-only. Zsh continues to use `autocomplete command "…"`.
+Default Readline bindings:
 
-## Tips and Tricks
+| Action | Binding | Command |
+|---|---:|---|
+| Complete the current line | <kbd>Ctrl-X Ctrl-A</kbd> | `autocomplete ai-complete` |
+| Rewrite the current line | <kbd>Ctrl-X Ctrl-B</kbd> | `autocomplete ai-rewrite` |
 
-1. For command parameters: `autocomplete command "reformat video to fit youtube"`
-2. For complex tasks: `autocomplete command "create a github repo, init a readme, and push it"`
+To change or disable these bindings, set the variables before sourcing the
+runtime:
+
+```bash
+export ACSH_AI_COMPLETE_KEY='\C-x\C-a'
+export ACSH_AI_REWRITE_KEY='\C-x\C-b'
+source autocomplete enable
+```
+
+Set either variable to an empty string to disable that binding.
+
+Zsh users can use the cross-shell command interface:
+
+```bash
+autocomplete command "your request here"
+```
 
 ## Configuration
 
+View the active configuration:
+
 ```bash
-autocomplete config              # view current settings
+autocomplete config
+```
+
+If your shell is enabled, the status line should show `Enabled`. If it does
+not, reload the shell integration:
+
+```bash
+source autocomplete enable
+```
+
+Update a setting:
+
+```bash
 autocomplete config set <key> <value>
 ```
 
+Common settings:
+
+| Setting | Default | Purpose |
+|---|---:|---|
+| `provider` | `openai` | LLM provider to use for explicit AI requests |
+| `model` | provider default | Model name sent to the provider |
+| `temperature` | `0.0` | Controls variation in suggestions |
+| `request_timeout_seconds` | `5` | Maximum time for one provider request |
+| `cache_size` | `10` | Number of cached AI answers to keep |
+| `tab_display_mode` | `list` | Bash native completion display: `list` or `menu` |
+
 ![Configuration Options](https://github.com/user-attachments/assets/61578f27-594f-4bc4-ba86-c5f99a41e8a9)
 
-### Context — every section is opt-in and off by default
+## Providers
 
-The base prompt always contains only the mode, your active shell, your input, and output instructions. A context section is appended only when its switch is `true` **and** the bounded helper produced something to include.
+Autocomplete.sh supports:
 
-| Key | Default | What a request would include |
-|---|---|---|
-| `context_terminal` | `false` | Physical working directory, OS type, shell, terminal type — never username, hostname, or home |
-| `context_environment` | `false` | Sorted environment variable names only (never values; `ACSH_*` excluded) |
-| `context_history` | `false` | Recently run commands, with API keys, tokens, secrets, passwords, and `Authorization: Bearer …` redacted |
-| `context_recent_files` | `false` | Current-directory file basenames only — no absolute paths, owners, or permissions |
-| `context_help` | `false` | `--help` output of the first executable in your request (aliases, functions, and builtins are skipped) |
+- OpenAI
+- Anthropic
+- Groq
+- Ollama
+- Any OpenAI-compatible Chat Completions endpoint
 
-Section bounds: `max_environment_names` 50, `max_history_commands` 10, `max_recent_files` 10, `max_help_lines` 40, `help_timeout_seconds` 0.25.
-
-Enable a section and see exactly what a request would send:
+The easiest setup path is:
 
 ```bash
-autocomplete config set context_history true
-autocomplete command --dry-run "your command here"
+autocomplete model
 ```
 
-### Providers
-
-Support for OpenAI, Groq, Anthropic, and Ollama is built in. The `openai-compatible` provider targets any local or remote server that implements the OpenAI Chat Completions API — no product-specific endpoint required. A generic local example:
+For a local or self-hosted OpenAI-compatible endpoint:
 
 ```bash
 autocomplete config set provider openai-compatible
@@ -135,54 +189,101 @@ autocomplete config set request_timeout_seconds 5
 autocomplete config set extra_body_json '{"chat_template_kwargs":{"enable_thinking":false}}'
 ```
 
-`openai_compatible_api_key` may be left empty: the `Authorization` header is then omitted, so keyless local endpoints work as-is. Set it (or export `OPENAI_COMPATIBLE_API_KEY`) to send `Authorization: Bearer …`.
+If `openai_compatible_api_key` is empty, Autocomplete.sh omits the
+`Authorization` header. This works for keyless local endpoints. To send a key,
+set it in config or export `OPENAI_COMPATIBLE_API_KEY`.
 
-Notes:
+```bash
+autocomplete config set openai_compatible_api_key sk-your-key
+```
 
-- `request_headers_json` and `extra_body_json` apply only with the `openai-compatible` provider; non-default values with any other provider are a configuration error.
-- `extra_body_json` is merged into the request body before the completion schema is applied, so it can add fields such as `max_tokens` or `chat_template_kwargs`. The reserved keys `model`, `messages`, `tools`, `tool_choice`, `response_format`, and `stream` are rejected.
-- `Authorization` and `Content-Type` are managed for you and cannot be overridden in `request_headers_json`.
-- `request_timeout_seconds` (default `5`) bounds each provider request.
+Provider notes:
 
-## Usage Tracking
+- `request_headers_json` and `extra_body_json` only work with
+  `openai-compatible`.
+- `Authorization` and `Content-Type` are managed by Autocomplete.sh and cannot
+  be overridden in `request_headers_json`.
+- Reserved request-body keys are rejected: `model`, `messages`, `tools`,
+  `tool_choice`, `response_format`, and `stream`.
+
+![Model Selection](https://github.com/user-attachments/assets/6206963f-81c2-4d68-b054-6ec88969ba0c)
+
+## Context and Privacy
+
+By default, AI requests include only:
+
+- the mode
+- your active shell
+- your input
+- output instructions
+
+Extra context is opt-in. Enable only the sections you want:
+
+| Key | Default | Included when enabled |
+|---|---:|---|
+| `context_terminal` | `false` | Working directory, OS type, shell, terminal type |
+| `context_environment` | `false` | Environment variable names only, never values |
+| `context_history` | `false` | Recent commands with secrets redacted |
+| `context_recent_files` | `false` | Current-directory file basenames only |
+| `context_help` | `false` | Bounded `--help` output for the first executable |
+
+Context limits:
+
+| Setting | Default |
+|---|---:|
+| `max_environment_names` | `50` |
+| `max_history_commands` | `10` |
+| `max_recent_files` | `10` |
+| `max_help_lines` | `40` |
+| `help_timeout_seconds` | `0.25` |
+
+See what would be sent before making a request:
+
+```bash
+autocomplete config set context_history true
+autocomplete command --dry-run "undo my last git commit but keep the changes"
+```
+
+## Usage and Cache
+
+Show request usage:
 
 ```bash
 autocomplete usage
 ```
 
+Clear cached answers and logs:
+
+```bash
+autocomplete clear
+```
+
 ![Usage Statistics](https://github.com/user-attachments/assets/0fc611b9-fb4c-4f68-bf01-8e6ecdcf7410)
-
-## Use Cases
-
-- **Data Engineers**: Manipulate datasets efficiently
-- **Backend Developers**: Deploy updates swiftly
-- **Linux Users**: Navigate systems seamlessly
-- **Terminal Novices**: Build command-line confidence
-- **Efficiency Seekers**: Streamline repetitive tasks
-- **Documentation Seekers**: Quickly understand commands
 
 ## Development
 
-### Local Installation
-
-Install your local checkout with the installer:
+Install a local checkout:
 
 ```bash
 git clone git@github.com:closedloop-technologies/autocomplete-sh.git
 cd autocomplete-sh
-./docs/install.sh --shell bash --version dev   # or: --shell zsh
+./docs/install.sh --shell bash --version dev
 ```
 
-This installs the local script to `$HOME/.local/bin/autocomplete` and registers it in your shell.
-
-### Testing
+For Zsh:
 
 ```bash
-sudo apt install bats
+./docs/install.sh --shell zsh --version dev
+```
+
+Run the tests:
+
+```bash
+sudo apt install bats shellcheck zsh
 bats tests
 ```
 
-### Docker Testing
+Run the Docker test image:
 
 ```bash
 docker build -t autocomplete-sh .
@@ -191,22 +292,24 @@ docker run --rm autocomplete-sh
 
 ## Maintainers
 
-Currently maintained by Sean Kruzel [@closedloop](https://github.com/closedloop) at [Closedloop.tech](https://Closedloop.tech)
+Maintained by Sean Kruzel [@closedloop](https://github.com/closedloop) at
+[Closedloop.tech](https://Closedloop.tech).
 
-Contributions and bug fixes are welcome!
+Contributions and bug fixes are welcome.
 
 ## Support Open Source
 
-The best way to support Autocomplete.sh is to just use it!
+The best way to support Autocomplete.sh is to use it, share it, and star the
+project.
 
-- [Just use it!](https://github.com/closedloop-technologies/autocomplete-sh?tab=readme-ov-file#quick-start)
-- [Share it!](https://x.com/intent/post?text=I+love+autocomplete.sh%21++%22autocomplete+command%22+helps+me+build+quickly+%40JustBuild_ai)
-- Star it!
+- [Just use it](https://github.com/closedloop-technologies/autocomplete-sh?tab=readme-ov-file#quick-start)
+- [Share it](https://x.com/intent/post?text=I+love+autocomplete.sh%21++%22autocomplete+command%22+helps+me+build+quickly+%40JustBuild_ai)
+- Star it
 
-If you want to help me keep up the energy to build stuff like this, please:
+If you want to support ongoing work:
 
 [!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/skruzel)
 
 ## License
 
-See the [MIT-LICENSE](./LICENSE) file for details.
+See the [MIT license](./LICENSE).
